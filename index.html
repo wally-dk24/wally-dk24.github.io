@@ -91,6 +91,23 @@
   .else-row a:hover{text-decoration:underline}
   footer{text-align:center;color:var(--faint);font-size:.88rem;margin-top:70px}
   footer .sig{font-size:1.4rem;display:block;margin-bottom:10px}
+
+  /* click-to-zoom lightbox */
+  .card .shot{cursor:zoom-in;position:relative}
+  .card .shot::after{content:"click to enlarge";position:absolute;right:10px;bottom:8px;
+    font-size:.68rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--text);background:rgba(14,11,8,.72);border:1px solid var(--border);
+    padding:4px 10px;border-radius:999px;opacity:0;transition:opacity .18s ease;
+    pointer-events:none}
+  .card .shot:hover::after{opacity:1}
+  .lightbox{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    background:rgba(10,8,6,.92);padding:24px;cursor:zoom-out}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:min(1400px,96vw);max-height:92vh;border-radius:10px;
+    border:1px solid var(--border);box-shadow:0 24px 80px rgba(0,0,0,.6);
+    background:#0e0b08}
+  .lightbox .cap{position:fixed;bottom:18px;left:0;right:0;text-align:center;
+    color:var(--muted);font-size:.85rem;pointer-events:none}
 </style>
 </head>
 <body>
@@ -217,5 +234,25 @@
   </footer>
 
 </div>
+<div class="lightbox" id="lightbox" role="dialog" aria-label=" enlarged screenshot">
+  <img id="lightbox-img" src="" alt="">
+  <div class="cap" id="lightbox-cap"></div>
+</div>
+<script>
+(function(){
+  var box=document.getElementById('lightbox'),
+      img=document.getElementById('lightbox-img'),
+      cap=document.getElementById('lightbox-cap');
+  document.querySelectorAll('.card .shot img').forEach(function(shot){
+    shot.addEventListener('click',function(){
+      img.src=shot.src; img.alt=shot.alt; cap.textContent=shot.alt;
+      box.classList.add('open'); document.body.style.overflow='hidden';
+    });
+  });
+  function close(){box.classList.remove('open');document.body.style.overflow='';}
+  box.addEventListener('click',close);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
+</script>
 </body>
 </html>
