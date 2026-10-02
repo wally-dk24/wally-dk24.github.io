@@ -94,7 +94,7 @@
 
   /* click-to-zoom lightbox */
   .card .shot{cursor:zoom-in;position:relative}
-  .card .shot::after{content:"click to enlarge";position:absolute;right:10px;bottom:8px;
+  .card .shot::after{content:"click to enlarge — click again for 1:1";position:absolute;right:10px;bottom:8px;
     font-size:.68rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--text);background:rgba(14,11,8,.72);border:1px solid var(--border);
     padding:4px 10px;border-radius:999px;opacity:0;transition:opacity .18s ease;
@@ -105,7 +105,9 @@
   .lightbox.open{display:flex}
   .lightbox img{max-width:min(1400px,96vw);max-height:92vh;border-radius:10px;
     border:1px solid var(--border);box-shadow:0 24px 80px rgba(0,0,0,.6);
-    background:#0e0b08}
+    background:#0e0b08;cursor:zoom-in}
+  .lightbox img.full{max-width:none;max-height:none;cursor:zoom-out}
+  .lightbox.scroll{overflow:auto;align-items:flex-start}
   .lightbox .cap{position:fixed;bottom:18px;left:0;right:0;text-align:center;
     color:var(--muted);font-size:.85rem;pointer-events:none}
 </style>
@@ -246,8 +248,14 @@
   document.querySelectorAll('.card .shot img').forEach(function(shot){
     shot.addEventListener('click',function(){
       img.src=shot.src; img.alt=shot.alt; cap.textContent=shot.alt;
+      img.classList.remove('full'); box.classList.remove('scroll');
       box.classList.add('open'); document.body.style.overflow='hidden';
     });
+  });
+  img.addEventListener('click',function(e){
+    e.stopPropagation();
+    img.classList.toggle('full');
+    box.classList.toggle('scroll', img.classList.contains('full'));
   });
   function close(){box.classList.remove('open');document.body.style.overflow='';}
   box.addEventListener('click',close);
