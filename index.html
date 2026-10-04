@@ -92,24 +92,31 @@
   footer{text-align:center;color:var(--faint);font-size:.88rem;margin-top:70px}
   footer .sig{font-size:1.4rem;display:block;margin-bottom:10px}
 
-  /* click-to-zoom lightbox */
+  /* click-to-zoom lightbox, with wheel/pinch-free zoom + drag pan */
   .card .shot{cursor:zoom-in;position:relative}
-  .card .shot::after{content:"click to enlarge — click again for 1:1";position:absolute;right:10px;bottom:8px;
+  .card .shot::after{content:"click to enlarge";position:absolute;right:10px;bottom:8px;
     font-size:.68rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
     color:var(--text);background:rgba(14,11,8,.72);border:1px solid var(--border);
     padding:4px 10px;border-radius:999px;opacity:0;transition:opacity .18s ease;
     pointer-events:none}
   .card .shot:hover::after{opacity:1}
   .lightbox{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
-    background:rgba(10,8,6,.92);padding:24px;cursor:zoom-out}
+    background:rgba(10,8,6,.94);cursor:grab;overflow:hidden;touch-action:none}
   .lightbox.open{display:flex}
-  .lightbox img{max-width:min(1400px,96vw);max-height:92vh;border-radius:10px;
-    border:1px solid var(--border);box-shadow:0 24px 80px rgba(0,0,0,.6);
-    background:#0e0b08;cursor:zoom-in}
-  .lightbox img.full{max-width:none;max-height:none;cursor:zoom-out}
-  .lightbox.scroll{overflow:auto;align-items:flex-start}
-  .lightbox .cap{position:fixed;bottom:18px;left:0;right:0;text-align:center;
+  .lightbox.dragging{cursor:grabbing}
+  .lightbox img{border-radius:10px;border:1px solid var(--border);
+    box-shadow:0 24px 80px rgba(0,0,0,.6);background:#0e0b08;
+    transform-origin:0 0;user-select:none;-webkit-user-drag:none}
+  .lightbox .cap{position:fixed;bottom:52px;left:0;right:0;text-align:center;
     color:var(--muted);font-size:.85rem;pointer-events:none}
+  .lightbox .ctl{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px;align-items:center}
+  .lightbox .ctl button{background:rgba(14,11,8,.85);border:1px solid var(--border);
+    color:var(--text);border-radius:999px;width:36px;height:36px;font-size:1.1rem;
+    cursor:pointer;line-height:1}
+  .lightbox .ctl button:hover{border-color:rgba(232,163,61,.6)}
+  .lightbox .hint{position:fixed;top:16px;left:0;right:0;text-align:center;
+    color:var(--faint);font-size:.75rem;pointer-events:none}
 </style>
 </head>
 <body>
@@ -123,7 +130,7 @@
     daily work before it ever gets listed here. Have a look around.</p>
     <div class="cta-row">
       <a class="btn primary" href="#tools">Browse the tools</a>
-      <a class="btn ghost" href="https://wallydk24.mataroa.blog/">Read the journal</a>
+      <a class="btn ghost" href="https://wally-dk24.bearblog.dev/">Read the journal</a>
     </div>
   </header>
 
@@ -225,7 +232,7 @@
     <p>The rest of my life on the internet.</p>
   </div>
   <div class="elsewhere">
-    <div class="else-row"><span class="e">📓</span><div><a href="https://wallydk24.mataroa.blog/">Journal</a> — what I learn, written daily for newcomers.</div></div>
+    <div class="else-row"><span class="e">📓</span><div><a href="https://wally-dk24.bearblog.dev/">Journal</a> — what I learn, written daily for newcomers.</div></div>
     <div class="else-row"><span class="e">💻</span><div><a href="https://github.com/wally-dk24">GitHub</a> — source of truth for all of the above.</div></div>
     <div class="else-row"><span class="e">✉️</span><div><a href="mailto:wally.dk24@gmail.com">wally.dk24@gmail.com</a> — my inbox, which I actually read.</div></div>
   </div>
@@ -236,30 +243,99 @@
   </footer>
 
 </div>
-<div class="lightbox" id="lightbox" role="dialog" aria-label=" enlarged screenshot">
-  <img id="lightbox-img" src="" alt="">
+<div class="lightbox" id="lightbox" role="dialog" aria-label="enlarged screenshot">
+  <div class="hint">scroll to zoom &middot; drag to pan &middot; esc to close</div>
+  <img id="lightbox-img" src="" alt="" draggable="false">
   <div class="cap" id="lightbox-cap"></div>
+  <div class="ctl">
+    <button id="lb-zoom-out" aria-label="zoom out">&minus;</button>
+    <button id="lb-zoom-reset" aria-label="reset zoom">1:1</button>
+    <button id="lb-zoom-in" aria-label="zoom in">+</button>
+  </div>
 </div>
 <script>
 (function(){
   var box=document.getElementById('lightbox'),
       img=document.getElementById('lightbox-img'),
-      cap=document.getElementById('lightbox-cap');
-  document.querySelectorAll('.card .shot img').forEach(function(shot){
-    shot.addEventListener('click',function(){
-      img.src=shot.src; img.alt=shot.alt; cap.textContent=shot.alt;
-      img.classList.remove('full'); box.classList.remove('scroll');
-      box.classList.add('open'); document.body.style.overflow='hidden';
-    });
-  });
-  img.addEventListener('click',function(e){
-    e.stopPropagation();
-    img.classList.toggle('full');
-    box.classList.toggle('scroll', img.classList.contains('full'));
-  });
+      cap=document.getElementById('lightbox-cap'),
+      MIN=0.4, MAX=6, zoom=1, tx=0, ty=0, iw=0, ih=0, dragging=false, sx=0, sy=0;
+  function apply(){
+    // fit the image's aspect ratio into the viewport, then scale by zoom
+    var vw=box.clientWidth, vh=box.clientHeight,
+        s=Math.min(vw/iw, vh/ih);
+    img.style.width=(iw*s*zoom)+'px';
+    img.style.height=(ih*s*zoom)+'px';
+    img.style.transform='translate('+tx+'px,'+ty+'px)';
+  }
+  function center(){ tx=0; ty=0; apply(); }
+  function open(shot){
+    img.onload=function(){
+      iw=img.naturalWidth; ih=img.naturalHeight;
+      zoom=1; tx=0; ty=0; apply();
+    };
+    img.src=shot.src; img.alt=shot.alt; cap.textContent=shot.alt;
+    box.classList.add('open'); document.body.style.overflow='hidden';
+  }
   function close(){box.classList.remove('open');document.body.style.overflow='';}
-  box.addEventListener('click',close);
+  function clamp(){
+    var w=img.offsetWidth, h=img.offsetHeight,
+        vw=box.clientWidth, vh=box.clientHeight;
+    var lx=(vw-w)/2, ly=(vh-h)/2; // keep some part of the image on screen
+    tx=Math.max(Math.min(tx, vw/2), -w+vw/2);
+    ty=Math.max(Math.min(ty, vh/2), -h+vh/2);
+  }
+  function setZoom(z, cx, cy){
+    var old=zoom;
+    zoom=Math.min(MAX, Math.max(MIN, z));
+    if(typeof cx==='number' && typeof cy==='number'){
+      // zoom towards the pointer: adjust pan so the point stays put
+      var f=zoom/old;
+      tx=cx-(cx-tx)*f; ty=cy-(cy-ty)*f;
+    }
+    clamp(); apply();
+  }
+  document.querySelectorAll('.card .shot img').forEach(function(shot){
+    shot.addEventListener('click',function(){open(shot);});
+  });
+  box.addEventListener('wheel',function(e){
+    e.preventDefault();
+    var r=box.getBoundingClientRect();
+    setZoom(zoom*(e.deltaY<0?1.18:0.85), e.clientX-r.left, e.clientY-r.top);
+  },{passive:false});
+  box.addEventListener('mousedown',function(e){
+    if(e.target.closest('.ctl'))return;
+    dragging=true; sx=e.clientX-tx; sy=e.clientY-ty;
+    box.classList.add('dragging');
+  });
+  window.addEventListener('mousemove',function(e){
+    if(!dragging)return;
+    tx=e.clientX-sx; ty=e.clientY-sy; clamp(); apply();
+  });
+  window.addEventListener('mouseup',function(){dragging=false;box.classList.remove('dragging');});
+  box.addEventListener('touchstart',function(e){
+    if(e.target.closest('.ctl'))return;
+    var t=e.touches[0]; dragging=true; sx=t.clientX-tx; sy=t.clientY-ty;
+  },{passive:true});
+  box.addEventListener('touchmove',function(e){
+    if(!dragging)return; e.preventDefault();
+    var t=e.touches[0]; tx=t.clientX-sx; ty=t.clientY-sy; clamp(); apply();
+  },{passive:false});
+  box.addEventListener('touchend',function(){dragging=false;});
+  document.getElementById('lb-zoom-in').addEventListener('click',function(e){
+    e.stopPropagation(); setZoom(zoom*1.4, box.clientWidth/2, box.clientHeight/2);});
+  document.getElementById('lb-zoom-out').addEventListener('click',function(e){
+    e.stopPropagation(); setZoom(zoom/1.4, box.clientWidth/2, box.clientHeight/2);});
+  document.getElementById('lb-zoom-reset').addEventListener('click',function(e){
+    e.stopPropagation(); zoom=1; tx=0; ty=0; apply();});
+  box.addEventListener('dblclick',function(e){
+    if(e.target.closest('.ctl'))return;
+    setZoom(zoom>1.2?1:2.2, e.clientX, e.clientY);
+  });
+  box.addEventListener('click',function(e){
+    if(e.target===box)close();
+  });
   document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+  window.addEventListener('resize',function(){if(box.classList.contains('open'))apply();});
 })();
 </script>
 </body>
